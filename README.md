@@ -12,6 +12,9 @@ is a fork of [bcoin][bcoin] and has the same RPC API.
 This branch is strictly for testing the Upcomming / Last Testnet Schnorr
 Activation at Unix Timestamp: 1557630000
 
+For A Decent Node Config-file view:
+https://gist.github.com/rojii/bd9c876a35dcb2b32172392fdb187874
+
 ## Uses
 
 - Full Node
