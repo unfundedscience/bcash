@@ -9,6 +9,9 @@ written in node.js.
 Bcash is undergoing development and testing and is in alpha stage. Bcash
 is a fork of [bcoin][bcoin] and has the same RPC API.
 
+This branch is strictly for testing the Upcomming / Last Testnet Schnorr
+Activation at Unix Timestamp: 1557630000
+
 ## Uses
 
 - Full Node
@@ -26,6 +29,11 @@ $ git clone git://github.com/bcoin-org/bcash.git
 $ cd bcash
 $ npm install
 $ ./bin/bcash
+$ git clone git://github.com/bcoin-org/bclient.git
+$ cd bclient
+$ npm install
+$ ./bin/bcoin-cli -n testnet rpc invalidateblock
+00000000000000c811de2e5b1935a533197dbe0abeec0eb91ee9f7013aa2da06
 ```
 
 See the [Beginner's Guide][guide] for more in-depth installation instructions.
@@ -56,7 +64,7 @@ all code is your original work. `</legalese>`
 
 - Copyright (c) 2014-2015, Fedor Indutny (MIT License).
 - Copyright (c) 2014-2017, Christopher Jeffrey (MIT License).
-- Copyright (c) 2018, bcash developers.
+- Copyright (c) 2019, bcash developers.
 
 See LICENSE for more info.
 
