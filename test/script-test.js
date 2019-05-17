@@ -73,6 +73,13 @@ describe('Script', function() {
     assert(decoded.isScripthash());
   });
 
+  it('should recognize a Witness Program output', () => {
+    const hex = '0020fc8b08ed636cb23afcb425ff260b3a'
+      + 'bd03380a2333b54cfa5d51ac52d803baf4';
+    const decoded = Script.fromRaw(hex, 'hex');
+    assert(decoded.isProgram());
+  });
+
   it('should recognize a Null Data output', () => {
     const hex = '6a28590c080112220a1b353930632e6f7267282a5f'
       + '5e294f7665726c6179404f7261636c65103b1a010c';
