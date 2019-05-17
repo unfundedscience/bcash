@@ -1,5 +1,5 @@
-/* eslint-env mocha */
 /* eslint prefer-arrow-callback: "off" */
+/* eslint-env mocha */
 /* eslint indent: "off" */
 
 'use strict';
@@ -12,15 +12,13 @@ const Framer = require('../lib/net/framer');
 const Parser = require('../lib/net/parser');
 const packets = require('../lib/net/packets');
 const common = require('../lib/net/common');
-const InvItem = require('../lib/primitives/invitem');
 const consensus = require('../lib/protocol/consensus');
-const invTypes = InvItem.types;
 const MemBlock = require('../lib/primitives/memblock');
 const network = Network.get('main');
 
 describe('Protocol', function() {
   const pkg = require('../lib/pkg');
-  const agent = `/bcoin:${pkg.version}/`;
+  const agent = `/bcash:${pkg.version}/`;
   let parser, framer;
 
   beforeEach(() => {
@@ -146,26 +144,5 @@ describe('Protocol', function() {
 
     const rawpacket = framer.packet(packet.cmd, packet.toRaw());
     parser.feed(rawpacket);
-  });
-
-  it('should limit packet size to MAX_MESSAGE', (cb) => {
-    const DUMMY = Buffer.alloc(32);
-    const items = [];
-
-    for (let i = 0; i < 50000; i++)
-      items.push(new InvItem(invTypes.BLOCK, DUMMY));
-
-    const getDataPacket = new packets.GetDataPacket(items);
-    const size = getDataPacket.getSize();
-
-    assert.strictEqual(getDataPacket.isOversized(), true);
-
-    parser.once('error', (e) => {
-      assert.strictEqual(e.message, `Packet length too large: ${size}.`);
-
-      cb();
-    });
-    const raw = framer.packet(getDataPacket.cmd, getDataPacket.toRaw());
-    parser.feed(raw);
   });
 });
