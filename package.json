@@ -20,12 +20,12 @@
     "wallet"
   ],
   "engines": {
-    "node": ">=8.0.0"
+    "node": ">=8.6.0"
   },
   "dependencies": {
     "bcfg": "^0.1.6",
     "bclient": "^0.1.7",
-    "bcrypto": "^3.1.6",
+    "bcrypto": "^3.1.11",
     "bdb": "^1.1.7",
     "bdns": "^0.1.5",
     "bevent": "^0.1.5",
@@ -59,7 +59,9 @@
     "bcash": "./bin/bcash",
     "bcash-node": "./bin/node",
     "bcash-spvnode": "./bin/spvnode",
-    "bcash-wallet": "./bin/bwallet"
+    "bwallet": "./bin/bwallet",
+    "bcash-cli": "./bin/bcash-cli",
+    "bwallet-cli": "./bin/bwallet-cli"
   },
   "scripts": {
     "browserify": "browserify -s bcash lib/bcoin-browser.js | uglifyjs -c > bcash.js",
@@ -72,11 +74,7 @@
     "test-browser": "NODE_BACKEND=js bmocha --reporter spec test/*.js",
     "test-file": "bmocha --reporter spec",
     "test-file-browser": "NODE_BACKEND=js bmocha --reporter spec",
-    "test-ci": "istanbul cover --report lcovonly node_modules/.bin/bmocha -- --reporter spec test/*-test.js",
-    "webpack": "webpack --mode production --config webpack.browser.js",
-    "webpack-browser": "webpack --mode production --config webpack.browser.js",
-    "webpack-compat": "webpack --mode production --config webpack.compat.js",
-    "webpack-app": "webpack --mode production --config webpack.app.js"
+    "test-ci": "istanbul cover --report lcovonly node_modules/.bin/bmocha -- --reporter spec test/*-test.js"
   },
   "browser": {
     "./lib/hd/nfkd": "./lib/hd/nfkd-compat.js",
