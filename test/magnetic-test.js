@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const common = require('../lib/script/common');
 const Script = require('../lib/script/script');
 const Stack = require('../lib/script/stack');
@@ -29,7 +29,7 @@ function isSuccess(stack, script, expected) {
   for (const flag of flags) {
     const input = stack.clone();
     script.execute(input, flag | common.flags.VERIFY_CHECKDATASIG);
-    assert.deepEqual(input.items, expected);
+    assert(input.items, expected);
   }
 }
 
@@ -42,7 +42,7 @@ function isError(stack, script, error) {
     } catch (e) {
       err = e;
     }
-    assert.typeOf(err, 'error');
+    assert(err, 'error');
     assert.strictEqual(err.code, error);
   }
 }
