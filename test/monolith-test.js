@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const common = require('../lib/script/common');
 const Opcode = require('../lib/script/opcode');
 const Script = require('../lib/script/script');
@@ -36,7 +36,7 @@ function isError(stack, script, error) {
     } catch (e) {
       err = e;
     }
-    assert.typeOf(err, 'error');
+    assert(err, 'error');
     assert.strictEqual(err.code, error);
   }
 }
