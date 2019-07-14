@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const Script = require('../lib/script/script');
 const Stack = require('../lib/script/stack');
 const Opcode = require('../lib/script/opcode');
@@ -71,6 +71,13 @@ describe('Script', function() {
     const hex = 'a91419a7d869032368fd1f1e26e5e73a4ad0e474960e87';
     const decoded = Script.fromRaw(hex, 'hex');
     assert(decoded.isScripthash());
+  });
+
+  it('should recognize a Witness Program output', () => {
+    const hex = '0020fc8b08ed636cb23afcb425ff260b3a'
+      + 'bd03380a2333b54cfa5d51ac52d803baf4';
+    const decoded = Script.fromRaw(hex, 'hex');
+    assert(decoded.isProgram());
   });
 
   it('should recognize a Null Data output', () => {
@@ -333,7 +340,7 @@ describe('Script', function() {
         }
 
         if (expected !== 'OK') {
-          assert.typeOf(err, 'error');
+          assert(err, 'error');
           assert.strictEqual(err.code, expected);
           return;
         }

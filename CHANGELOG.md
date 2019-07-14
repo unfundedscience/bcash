@@ -1,9 +1,19 @@
 # Bcash Release Notes & Changelog
 
+## v1.2.0
+
+This release includes:
+- May 15th upgrade
+  - Implement Schnorr Signatures on both OP_CHECKSIG, OP_CHECKDATASIG Opcodes.
+  - Implement Segwit Script Recovery Mechanism.
+  - Remove VERIFY_COMPRESSED_PUBKEY from Script Standardness Checks.
+  - Update bcrypto
+  - bug fixes
+
 ## v1.1.0
 
 This release includes:
-- Nov 15 upgrade 
+- Nov 15 upgrade
   - Implement and enforce canonical transaction order.
   - Add OP_CHECKDATASIG and OP_CHECKDATASIGVERIFY.
   - Enforce minimum transaction size of 100 bytes.

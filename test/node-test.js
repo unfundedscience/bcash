@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const consensus = require('../lib/protocol/consensus');
 const Coin = require('../lib/primitives/coin');
 const Script = require('../lib/script/script');
@@ -22,9 +22,12 @@ const node = new FullNode({
   apiKey: 'foo',
   network: 'regtest',
   workers: true,
+  workersSize: 2,
+  plugins: [require('../lib/wallet/plugin')],
   indexTX: true,
   indexAddress: true,
-  plugins: [require('../lib/wallet/plugin')]
+  port: 49331,
+  httpPort: 49332
 });
 
 const chain = node.chain;
@@ -483,51 +486,6 @@ describe('Node', function() {
     miner.mempool = node.mempool;
   });
 
-  it('should get a block template', async () => {
-    const json = await node.rpc.call({
-      method: 'getblocktemplate',
-      params: [],
-      id: '1'
-    }, {});
-
-    assert.typeOf(json.result, 'object');
-    assert.typeOf(json.result.curtime, 'number');
-    assert.typeOf(json.result.mintime, 'number');
-    assert.typeOf(json.result.maxtime, 'number');
-    assert.typeOf(json.result.expires, 'number');
-
-    assert.deepStrictEqual(json, {
-      result: {
-        capabilities: ['proposal'],
-        mutable: ['time', 'transactions', 'prevblock'],
-        version: 536870912,
-        rules: ['csv', 'testdummy'],
-        vbavailable: {},
-        vbrequired: 0,
-        height: 437,
-        previousblockhash: node.chain.tip.rhash(),
-        target:
-          '7fffff0000000000000000000000000000000000000000000000000000000000',
-        bits: '207fffff',
-        noncerange: '00000000ffffffff',
-        curtime: json.result.curtime,
-        mintime: json.result.mintime,
-        maxtime: json.result.maxtime,
-        expires: json.result.expires,
-        sigoplimit: 640000,
-        sizelimit: 32000000,
-        longpollid: node.chain.tip.rhash() + '00000000',
-        submitold: false,
-        coinbaseaux: { flags: '6d696e65642062792062636f696e' },
-        coinbasevalue: 1250000000,
-        coinbasetxn: undefined,
-        transactions: []
-      },
-      error: null,
-      id: '1'
-    });
-  });
-
   it('should send a block template proposal', async () => {
     const attempt = await node.miner.createBlock();
 
@@ -575,8 +533,7 @@ describe('Node', function() {
       isvalid: true,
       address: addr.toString(node.network),
       scriptPubKey: Script.fromAddress(addr, node.network).toJSON(),
-      ismine: false,
-      iswatchonly: false
+      isscript: false
     });
   });
 
@@ -635,10 +592,8 @@ describe('Node', function() {
 
     const json = await node.rpc.call({
       method: 'getblocktemplate',
-      params: [
-        {rules: ['segwit']}
-      ],
-      id: '1'
+      params: [],
+       id: '1'
     }, {});
 
     assert(!json.error);
@@ -683,85 +638,6 @@ describe('Node', function() {
 
     assert(!json.error);
     assert.strictEqual(json.result, true);
-  });
-
-  it('should get a block template', async () => {
-    let fees = 0;
-    let size = 0;
-
-    node.rpc.refreshBlock();
-
-    const json = await node.rpc.call({
-      method: 'getblocktemplate',
-      params: [],
-      id: '1'
-    }, {});
-
-    assert(!json.error);
-    assert(json.result);
-
-    const result = json.result;
-
-    for (const item of result.transactions) {
-      fees += item.fee;
-      size += item.size;
-    }
-
-    assert.strictEqual(result.transactions.length, 2);
-    assert.strictEqual(fees, tx1.getFee() + tx2.getFee());
-    assert.strictEqual(size, tx1.getSize() + tx2.getSize());
-    assert.strictEqual(result.transactions[0].txid, tx2.txid());
-    assert.strictEqual(result.transactions[1].txid, tx1.txid());
-    assert.strictEqual(result.coinbasevalue, 125e7 + fees);
-  });
-
-  it('should get tx by hash', async () => {
-    const block = await mineBlock();
-    await chain.add(block);
-
-    const tx = block.txs[0];
-    const hash = tx.hash();
-    const hasTX = await node.hasTX(hash);
-
-    assert.strictEqual(hasTX, true);
-
-    const tx2 = await node.getTX(hash);
-    assert.strictEqual(tx.txid(), tx2.txid());
-
-    const meta = await node.getMeta(hash);
-    assert.strictEqual(meta.tx.txid(), tx2.txid());
-  });
-
-  it('should get coin/tx by addr', async () => {
-    const addr = await wallet.receiveAddress();
-    const mtx = await wallet.createTX({
-      rate: 100000,
-      outputs: [{
-        value: 100000,
-        address: addr
-      }]
-    });
-
-    await wallet.sign(mtx);
-
-    const tx = mtx.toTX();
-    const job = await miner.createJob();
-
-    job.addTX(tx, mtx.view);
-    job.refresh();
-
-    const block = await job.mineAsync();
-    await chain.add(block);
-
-    await new Promise(r => setTimeout(r, 300));
-
-    const txs = await node.getTXByAddress(addr);
-    const tx2 = txs[0];
-    assert.strictEqual(tx.txid(), tx2.txid());
-
-    const coins = await node.getCoinsByAddress(addr);
-    const coin = coins[0];
-    assert.strictEqual(tx.txid(), coin.txid());
   });
 
   it('should broadcast a tx from inventory', async () => {

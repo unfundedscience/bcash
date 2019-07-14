@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const random = require('bcrypto/lib/random');
 const consensus = require('../lib/protocol/consensus');
 const Coin = require('../lib/primitives/coin');
@@ -17,7 +17,9 @@ const Network = require('../lib/protocol/network');
 const Output = require('../lib/primitives/output');
 const common = require('../lib/blockchain/common');
 const util = require('../lib/utils/util');
+const nodejsUtil = require('util');
 const Opcode = require('../lib/script/opcode');
+const BlockStore = require('../lib/blockstore/level');
 const opcodes = Script.opcodes;
 
 const ZERO_KEY = Buffer.alloc(33, 0x00);
@@ -28,11 +30,19 @@ ONE_HASH[0] = 0x01;
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
-  enabled: true
+  enabled: true,
+  size: 2
+});
+
+
+const blocks = new BlockStore({
+  memory: true,
+  network
 });
 
 const chain = new Chain({
   memory: true,
+  blocks,
   network,
   workers
 });
@@ -167,18 +177,23 @@ chain.on('disconnect', (entry, block) => {
 describe('Chain', function() {
   this.timeout(process.browser ? 1200000 : 60000);
 
-  it('should open chain and miner', async () => {
+  before(async() => {
+    await blocks.open();
     await chain.open();
     await miner.open();
+    await workers.open();
 
-    // use some time in the future for maa activation
-    // test should not take more than HOUR
     network.block.magneticAnomalyActivationTime = util.now() + 3600;
-  });
 
-  it('should add addrs to miner', async () => {
     miner.addresses.length = 0;
     miner.addAddress(wallet.getReceive());
+  });
+
+  after(async () => {
+    await workers.close();
+    await miner.close();
+    await chain.close();
+    await blocks.close();
   });
 
   it('should mine 200 blocks', async () => {
@@ -1045,9 +1060,52 @@ describe('Chain', function() {
     assert.bufferEqual(block2.hash(), chain.tip.hash);
   });
 
-  it('should cleanup', async () => {
-    network.block.magneticAnomalyActivationTime = MAA;
-    await miner.close();
-    await chain.close();
+  it('should inspect ChainEntry', async () => {
+    const fmt = nodejsUtil.format(tip1);
+    assert(typeof fmt === 'string');
+    assert(fmt.includes('hash'));
+    assert(fmt.includes('version'));
+    assert(fmt.includes('chainwork'));
+  });
+
+  describe('Checkpoints', function() {
+    before(async() => {
+      const entry = await chain.getEntry(chain.tip.height - 5);
+      assert(Buffer.isBuffer(entry.hash));
+      assert(Number.isInteger(entry.height));
+
+      network.checkpointMap[entry.height] = entry.hash;
+      network.lastCheckpoint = entry.height;
+    });
+
+    after(async () => {
+      network.checkpointMap = {};
+      network.lastCheckpoint = 0;
+    });
+
+    it('will reject blocks before last checkpoint', async () => {
+      const entry = await chain.getEntry(chain.tip.height - 10);
+      const block = await cpu.mineBlock(entry);
+
+      let err = null;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.equal(err.type, 'VerifyError');
+      assert.equal(err.reason, 'bad-fork-prior-to-checkpoint');
+      assert.equal(err.score, 100);
+    });
+
+    it('will accept blocks after last checkpoint', async () => {
+      const entry = await chain.getEntry(chain.tip.height - 4);
+      const block = await cpu.mineBlock(entry);
+
+      assert(await chain.add(block));
+    });
   });
 });

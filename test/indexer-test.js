@@ -3,281 +3,313 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
+const EventEmitter = require('events');
 const reorg = require('./util/reorg');
+const Script = require('../lib/script/script');
+const Opcode = require('../lib/script/opcode');
+const Address = require('../lib/primitives/address');
+const Block = require('../lib/primitives/block');
 const Chain = require('../lib/blockchain/chain');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const MemWallet = require('./util/memwallet');
-const MTX = require('../lib/primitives/mtx');
 const TXIndexer = require('../lib/indexer/txindexer');
 const AddrIndexer = require('../lib/indexer/addrindexer');
+const BlockStore = require('../lib/blockstore/level');
+const FullNode = require('../lib/node/fullnode');
+const SPVNode = require('../lib/node/spvnode');
 const Network = require('../lib/protocol/network');
-const random = require('bcrypto/lib/random');
-const {now} = require('../lib/utils/util');
 const network = Network.get('regtest');
+const {NodeClient, WalletClient} = require('bclient');
+const {forValue, testdir, rimraf} = require('./util/common');
 
-function setupIndexers(network) {
-  const workers = new WorkerPool({
-    enabled: true
-  });
-
-  const chain = new Chain({
-    memory: true,
-    network,
-    workers
-  });
-
-  const miner = new Miner({
-    chain,
-    version: 4,
-    workers
-  });
-
-  const cpu = miner.cpu;
-
-  const wallet = new MemWallet({
-    network
-  });
-
-  const txindexer = new TXIndexer({
-    memory: true,
-    network: network,
-    chain: chain
-  });
-
-  const addrindexer = new AddrIndexer({
-    memory: true,
-    network: network,
-    chain: chain
-  });
-
-  chain.on('connect', (entry, block) => {
-    wallet.addBlock(entry, block.txs);
-  });
-
-  chain.on('disconnect', (entry, block) => {
-    wallet.removeBlock(entry, block.txs);
-  });
-
-  return {
-    chain,
-    miner,
-    cpu,
-    wallet,
-    txindexer,
-    addrindexer
-  };
+const ports = {
+  p2p: 49331,
+  node: 49332,
+  wallet: 49334
 };
 
-function less(a, b) {
-  const ha = a.hash();
-  const hb = b.hash();
-
-  for (let i = 31; i >= 0; i--) {
-    if (ha[i] < hb[i])
-      return true;
-
-    if (ha[i] > hb[i])
-      return false;
+const vectors = [
+  // Secret for the public key vectors:
+  // cVDJUtDjdaM25yNVVDLLX3hcHUfth4c7tY3rSc4hy9e8ibtCuj6G
+  {
+    addr: 'bitcoincash:qzg9x9d3j62f7ljce5hzvu4krq4srv59cgtdgyjdsv',
+    amount: 1.99,
+    label: 'p2pkh'
+  },
+  {
+    addr: 'bitcoincash:qr23z9xn6fgq0yh4f4k7pg7kl7lrh6temvera4htvr',
+    amount: 0.11,
+    label: 'p2pkh'
   }
+];
 
-  return false;
-}
+
+const workers = new WorkerPool({
+  enabled: true,
+  size: 2
+});
+
+const blocks = new BlockStore({
+  memory: true,
+  network
+});
+
+const chain = new Chain({
+  memory: true,
+  network,
+  workers,
+  blocks
+});
+
+const miner = new Miner({
+  chain,
+  version: 4,
+  workers
+});
+
+const cpu = miner.cpu;
+
+const wallet = new MemWallet({
+  network
+});
+
+const txindexer = new TXIndexer({
+  memory: true,
+  network,
+  chain,
+  blocks
+});
+
+const addrindexer = new AddrIndexer({
+  memory: true,
+  network,
+  chain,
+  blocks
+});
 
 describe('Indexer', function() {
-  this.timeout(45000);
+  this.timeout(120000);
 
-  const maaTime = network.block.magneticAnomalyActivationTime;
-
-  after(() => {
-    network.block.magneticAnomalyActivationTime = maaTime;
+  before(async () => {
+    await blocks.open();
+    await chain.open();
+    await miner.open();
+    await txindexer.open();
+    await addrindexer.open();
+    await workers.open();
   });
 
-  for (const ctor of [true, false]) {
-    const suffix = ctor ? 'with ctor' : 'without ctor';
+  after(async () => {
+    await workers.close();
+    await blocks.close();
+    await chain.close();
+    await miner.close();
+    await txindexer.close();
+    await addrindexer.close();
+  });
 
-    let chain, miner, cpu, wallet, txindexer, addrindexer;
+  describe('Unit', function() {
+    it('should connect block', async () => {
+      const indexer = new AddrIndexer({
+        blocks: {},
+        chain: {}
+      });
 
-    it(`should open indexer ${suffix}`, async () => {
-      if (ctor)
-        network.block.magneticAnomalyActivationTime = now() - 45000;
-      else
-        network.block.magneticAnomalyActivationTime = now() + 45000;
+      indexer.height = 9;
 
-      const setup = setupIndexers(network);
+      indexer.getBlockMeta = (height) => {
+        return {
+          hash: Buffer.alloc(32, 0x00),
+          height: height
+        };
+      };
 
-      chain = setup.chain;
-      miner = setup.miner;
-      cpu = setup.cpu;
-      wallet = setup.wallet;
-      txindexer = setup.txindexer;
-      addrindexer = setup.addrindexer;
+      let called = false;
+      indexer._addBlock = async () => {
+        called = true;
+      };
 
-      await chain.open();
-      await miner.open();
-      await txindexer.open();
-      await addrindexer.open();
+      const meta = {height: 10};
+      const block = {prevBlock: Buffer.alloc(32, 0x00)};
+      const view = {};
+
+      const connected = await indexer._syncBlock(meta, block, view);
+      assert.equal(connected, true);
+      assert.equal(called, true);
     });
 
-    it(`should index 10 blocks ${suffix}`, async () => {
-      miner.addresses.length = 0;
-      miner.addAddress(wallet.getReceive());
-      for (let i = 0; i < 10; i++) {
-        const block = await cpu.mineBlock();
-        assert(block);
-        assert(await chain.add(block));
-      }
+    it('should not connect block', async () => {
+      const indexer = new AddrIndexer({
+        blocks: {},
+        chain: {}
+      });
 
-      assert.strictEqual(chain.state.hasMagneticAnomaly(), ctor);
-      assert.strictEqual(chain.height, 10);
-      assert.strictEqual(txindexer.state.startHeight, 10);
-      assert.strictEqual(addrindexer.state.startHeight, 10);
+      indexer.height = 9;
 
-      const coins =
-        await addrindexer.getCoinsByAddress(miner.getAddress());
-      assert.strictEqual(coins.length, 10);
+      indexer.getBlockMeta = (height) => {
+        return {
+          hash: Buffer.alloc(32, 0x02),
+          height: height
+        };
+      };
 
-      for (const coin of coins) {
-        const meta = await txindexer.getMeta(coin.hash);
-        assert.bufferEqual(meta.tx.hash(), coin.hash);
-      }
+      let called = false;
+      indexer._addBlock = async () => {
+        called = true;
+      };
+
+      const meta = {height: 10};
+      const block = {prevBlock: Buffer.alloc(32, 0x01)};
+      const view = {};
+
+      const connected = await indexer._syncBlock(meta, block, view);
+      assert.equal(connected, false);
+      assert.equal(called, false);
     });
 
-    it(`should rescan and reindex 10 missed blocks ${suffix}`, async () => {
-      await txindexer.disconnect();
-      await addrindexer.disconnect();
+    it('should disconnect block', async () => {
+      const indexer = new AddrIndexer({
+        blocks: {},
+        chain: {}
+      });
 
-      for (let i = 0; i < 10; i++) {
-        const block = await cpu.mineBlock();
-        assert(block);
-        assert(await chain.add(block));
-      }
+      indexer.height = 9;
 
-      assert.strictEqual(chain.height, 20);
+      indexer.getBlockMeta = (height) => {
+        return {
+          hash: Buffer.alloc(32, 0x00),
+          height: height
+        };
+      };
 
-      await txindexer.connect();
-      await addrindexer.connect();
+      let called = false;
+      indexer._removeBlock = async () => {
+        called = true;
+      };
 
-      await new Promise(r => addrindexer.once('chain tip', r));
+      const meta = {height: 9};
+      const block = {hash: () => Buffer.alloc(32, 0x00)};
+      const view = {};
 
-      assert.strictEqual(txindexer.state.startHeight, 20);
-      assert.strictEqual(addrindexer.state.startHeight, 20);
-
-      const coins =
-        await addrindexer.getCoinsByAddress(miner.getAddress());
-      assert.strictEqual(coins.length, 20);
-
-      for (const coin of coins) {
-        const meta = await txindexer.getMeta(coin.hash);
-        assert.bufferEqual(meta.tx.hash(), coin.hash);
-      }
+      const connected = await indexer._syncBlock(meta, block, view);
+      assert.equal(connected, true);
+      assert.equal(called, true);
     });
 
-    it(`should handle indexing a reorg ${suffix}`, async () => {
-      await reorg(chain, cpu, 10);
+    it('should not disconnect block', async () => {
+      const indexer = new AddrIndexer({
+        blocks: {},
+        chain: {}
+      });
 
-      assert.strictEqual(txindexer.state.startHeight, 31);
-      assert.strictEqual(addrindexer.state.startHeight, 31);
+      indexer.height = 9;
 
-      const coins =
-        await addrindexer.getCoinsByAddress(miner.getAddress());
-      assert.strictEqual(coins.length, 31);
+      indexer.getBlockMeta = (height) => {
+        return {
+          hash: Buffer.alloc(32, 0x01),
+          height: height
+        };
+      };
 
-      for (const coin of coins) {
-        const meta = await txindexer.getMeta(coin.hash);
-        assert.bufferEqual(meta.tx.hash(), coin.hash);
-      }
+      let called = false;
+      indexer._removeBlock = async () => {
+        called = true;
+      };
+
+      const meta = {height: 9};
+      const block = {hash: () => Buffer.alloc(32, 0x02)};
+      const view = {};
+
+      const connected = await indexer._syncBlock(meta, block, view);
+      assert.equal(connected, false);
+      assert.equal(called, false);
     });
 
-    it(`should mine blocks more than coinbase height ${suffix}`, async () => {
-      miner.addresses.length = 0;
-      miner.addAddress(wallet.getReceive());
-      for (let i = 0; i < 100; i++) {
-        const block = await cpu.mineBlock();
-        assert(block);
-        assert(await chain.add(block));
-      }
+    it('should error with limits', async () => {
+      const indexer = new AddrIndexer({
+        blocks: {},
+        chain: {},
+        maxTxs: 10
+      });
 
-      assert.strictEqual(chain.height, 131);
-      assert.strictEqual(txindexer.state.startHeight, 131);
-      assert.strictEqual(addrindexer.state.startHeight, 131);
+      await assert.rejects(async () => {
+        await indexer.getHashesByAddress(vectors[0].addr, {limit: 11});
+      }, {
+        name: 'Error',
+        message: 'Limit above max of 10.'
+      });
     });
 
-    it(`should have correct coinview for canonical txs ${suffix}`, async () => {
-      const job = await cpu.createJob();
-      const block = await chain.getBlock(chain.height - 99);
-      const cb = block.txs[0];
-      const addr = wallet.getAddress();
-      const fund = new MTX();
+    it('should track bound chain events and remove on close', async () => {
+      const indexer = new AddrIndexer({
+        blocks: {},
+        chain: new EventEmitter()
+      });
 
-      fund.addTX(cb, 0);
-      fund.addOutput(addr, 1e8);
+      const events = ['connect', 'disconnect', 'reset'];
 
-      wallet.sign(fund);
+      await indexer.open();
 
-      const tx1 = fund.toTX();
-      let hash = null;
+      for (const event of events)
+        assert.equal(indexer.chain.listeners(event).length, 1);
 
-      // find a pair of dependent txs such that
-      // tx2 < tx1 and tx2 spends tx1
-      // to test out of order indexing
-      for (;;) {
-        const spend = new MTX();
-        spend.addTX(tx1, 0);
-        spend.addOutput(addr, random.randomRange(1e3, 1e8));
-        wallet.sign(spend);
+      await indexer.close();
 
-        const tx2 = spend.toTX();
-        if (!less(tx2, tx1))
-          continue;
-        hash = tx2.hash();
+      for (const event of events)
+        assert.equal(indexer.chain.listeners(event).length, 0);
+    });
+  });
 
-        if (ctor) {
-          job.pushTX(tx2);
-          job.pushTX(tx1);
-        } else {
-          job.pushTX(tx1);
-          job.pushTX(tx2);
+    describe('Integration', function() {
+      const prefix = testdir('indexer');
+
+      beforeEach(async () => {
+        await rimraf(prefix);
+      });
+
+      after(async () => {
+        await rimraf(prefix);
+      });
+
+      it('will not index if pruned', async () => {
+        let err = null;
+
+        try {
+          new FullNode({
+            prefix: prefix,
+            network: 'regtest',
+            apiKey: 'foo',
+            memory: false,
+            prune: true,
+            indexTX: true,
+            indexAddress: true,
+            port: ports.p2p,
+            httpPort: ports.node
+          });
+        } catch (e) {
+          err = e;
         }
 
-        break;
-      }
+        assert(err);
+        assert.equal(err.message, 'Can not index while pruned.');
+      });
 
-      job.refresh();
-
-      const block1 = await job.mineAsync();
-
-      {
-        let entry, block, view;
-
-        chain.once('connect', (_entry, _block, _view) => {
-          entry = _entry;
-          block = _block;
-          view = _view;
+      it('will not index if spv', async () => {
+        const node = new SPVNode({
+          prefix: prefix,
+          network: 'regtest',
+          apiKey: 'foo',
+          memory: false,
+          indexTX: true,
+          indexAddress: true,
+          port: ports.p2p,
+          httpPort: ports.node
         });
 
-        assert(await chain.add(block1));
-
-        const coins = await addrindexer.getCoinsByAddress(addr);
-        assert.strictEqual(coins.length, 1);
-        assert.bufferEqual(coins[0].hash, hash);
-        for (const coin of coins) {
-          const meta = await txindexer.getMeta(coin.hash);
-          assert.bufferEqual(meta.tx.hash(), coin.hash);
-        }
-
-        await addrindexer.unindexBlock(entry, block, view);
-        const coins1 = await addrindexer.getCoinsByAddress(addr);
-        assert.strictEqual(coins1.length, 0);
-      }
+        assert.equal(node.txindex, null);
+        assert.equal(node.addrindex, null);
+      });
     });
-
-    it(`should close indexer ${suffix}`, async () => {
-      await chain.close();
-      await miner.close();
-      await txindexer.close();
-      await addrindexer.close();
-    });
-  }
 });
