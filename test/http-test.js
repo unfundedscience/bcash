@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const consensus = require('../lib/protocol/consensus');
 const Address = require('../lib/primitives/address');
 const Script = require('../lib/script/script');
@@ -66,9 +66,9 @@ describe('HTTP', function() {
     const info = await nclient.getInfo();
     assert.strictEqual(info.network, node.network.type);
     assert.strictEqual(info.version, pkg.version);
-    assert.typeOf(info.pool, 'object');
+    assert(info.pool, 'object');
     assert.strictEqual(info.pool.agent, node.pool.options.agent);
-    assert.typeOf(info.chain, 'object');
+    assert(info.chain, 'object');
     assert.strictEqual(info.chain.height, 0);
   });
 
@@ -77,7 +77,7 @@ describe('HTTP', function() {
     assert.strictEqual(info.id, 'test');
     const acct = await wallet.getAccount('default');
     const str = acct.receiveAddress;
-    assert.typeOf(str, 'string');
+    assert(str, 'string');
     addr = Address.fromString(str, node.network);
   });
 
@@ -253,8 +253,7 @@ describe('HTTP', function() {
       isvalid: true,
       address: addr.toString(node.network),
       scriptPubKey: Script.fromAddress(addr).toRaw().toString('hex'),
-      ismine: false,
-      iswatchonly: false
+      isscript: false
     });
   });
 
