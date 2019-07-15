@@ -3,17 +3,23 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const Chain = require('../lib/blockchain/chain');
 const ChainEntry = require('../lib/blockchain/chainentry');
 const Network = require('../lib/protocol/network');
 const consensus = require('../lib/protocol/consensus');
+const BlockStore = require('../lib/blockstore/level');
 
 const network = Network.get('main');
 
 function random(max) {
   return Math.floor(Math.random() * max);
 }
+
+const blocks = new BlockStore({
+  memory: true,
+  network
+});
 
 function getEntry(prev, time, bits) {
   const entry = new ChainEntry();
@@ -26,11 +32,13 @@ function getEntry(prev, time, bits) {
 
 const chain = new Chain({
   memory: true,
-  network
+  network,
+  blocks
 });
 
 describe('Difficulty', function() {
   it('should open chain', async () => {
+    await blocks.open();
     await chain.open();
   });
 
