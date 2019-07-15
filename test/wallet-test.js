@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const consensus = require('../lib/protocol/consensus');
 const util = require('../lib/utils/util');
 const hash256 = require('bcrypto/lib/hash256');
@@ -18,6 +18,9 @@ const Input = require('../lib/primitives/input');
 const Outpoint = require('../lib/primitives/outpoint');
 const Script = require('../lib/script/script');
 const HD = require('../lib/hd');
+const Wallet = require('../lib/wallet/wallet');
+const {BufferMap} = require('buffer-map');
+const nodejsUtil = require('util');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -25,8 +28,15 @@ const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
 const KEY2 = 'xprv9s21ZrQH143K3mqiSThzPtWAabQ22Pjp3uSNnZ53A5bQ4udp'
   + 'faKekc2m4AChLYH1XDzANhrSdxHYWUeTWjYJwFwWFyHkTMnMeAcW4JyRCZa';
 
-const enabled = true;
-const workers = new WorkerPool({ enabled });
+// abandon abandon... about key at m'/44'/0'/0'
+const PUBKEY = 'xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhaw'
+  + 'A7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj';
+
+const workers = new WorkerPool({
+  enabled: true,
+  size: 2
+});
+
 const wdb = new WalletDB({ workers });
 
 let currentWallet = null;
@@ -47,6 +57,11 @@ function curBlock(wdb) {
 
 function nextBlock(wdb) {
   return fakeBlock(wdb.state.height + 1);
+}
+
+function sortTXs(txs) {
+  txs.sort((a, b) => a.txid() < b.txid() ? -1 : 1);
+  return txs;
 }
 
 function fakeBlock(height) {
@@ -74,7 +89,7 @@ async function testP2PKH() {
   const flags = Script.flags.STANDARD_VERIFY_FLAGS;
   const receiveAddress = 'receiveAddress';
   const type = Address.types.PUBKEYHASH;
-  const wallet = await wdb.create({});
+  const wallet = await wdb.create();
 
   const waddr = await wallet.receiveAddress();
   const addr = Address.fromString(waddr.toString(wdb.network), wdb.network);
@@ -127,7 +142,6 @@ async function testP2SH() {
 
   // Our p2sh address
   const addr1 = await alice[receiveAddress]();
-
   assert.strictEqual(addr1.type, Address.types.SCRIPTHASH);
 
   assert((await alice[receiveAddress]()).equals(addr1));
@@ -215,10 +229,12 @@ describe('Wallet', function() {
 
   before(async () => {
     await wdb.open();
+    await workers.open();
   });
 
   after(async () => {
     await wdb.close();
+    await workers.close();
   });
 
   it('should open walletdb', () => {
@@ -488,6 +504,36 @@ describe('Wallet', function() {
     await wdb.addTX(t2.toTX());
     assert(conflict);
     assert.strictEqual((await wallet.getBalance()).unconfirmed, 0);
+  });
+
+  it('should handle double-spend (multiple inputs)', async () => {
+    const wallet = await wdb.create();
+    const address = await wallet.receiveAddress();
+
+    const hash = random.randomBytes(32);
+    const input0 = Input.fromOutpoint(new Outpoint(hash, 0));
+    const input1 = Input.fromOutpoint(new Outpoint(hash, 1));
+
+    const txa = new MTX();
+    txa.addInput(input0);
+    txa.addInput(input1);
+    txa.addOutput(address, 50000);
+    await wdb.addTX(txa.toTX());
+    assert.strictEqual((await wallet.getBalance()).unconfirmed, 50000);
+
+    let conflict = false;
+    wallet.on('conflict', () => {
+      conflict = true;
+    });
+
+    const txb = new MTX();
+    txb.addInput(input0);
+    txb.addInput(input1);
+    txb.addOutput(address, 49000);
+    await wdb.addTX(txb.toTX());
+
+    assert(conflict);
+    assert.strictEqual((await wallet.getBalance()).unconfirmed, 49000);
   });
 
   it('should handle more missed txs', async () => {
@@ -789,6 +835,30 @@ describe('Wallet', function() {
     assert.strictEqual(account.accountIndex, 1);
     assert.strictEqual(account.m, 1);
     assert.strictEqual(account.n, 1);
+  });
+
+  it('should inspect Wallet', async () => {
+    const wallet = await wdb.create();
+
+    const fmt = nodejsUtil.format(wallet);
+    assert(typeof fmt === 'string');
+    assert(fmt.includes('master'));
+    assert(fmt.includes('network'));
+    assert(fmt.includes('accountDepth'));
+  });
+
+  it('should inspect Account', async () => {
+    const wallet = await wdb.create();
+    const account = await wallet.createAccount({
+      name: 'foo'
+    });
+
+    const fmt = nodejsUtil.format(account);
+    assert(typeof fmt === 'string');
+    assert(fmt.includes('name'));
+    assert(fmt.includes('foo'));
+    assert(fmt.includes('initialized'));
+    assert(fmt.includes('lookahead'));
   });
 
   it('should fail to create duplicate account', async () => {
@@ -1267,12 +1337,31 @@ describe('Wallet', function() {
     importedKey = key;
   });
 
+  it('should require account key to create watch only wallet', async () => {
+    let err = null;
+
+    try {
+      await wdb.create({
+        watchOnly: true
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    assert(err);
+    assert.strictEqual(
+      err.message,
+      'Must add HD public keys to watch only wallet.'
+    );
+  });
+
   it('should import pubkey', async () => {
     const key = KeyRing.generate();
     const pub = new KeyRing(key.publicKey);
 
     const wallet = await wdb.create({
-      watchOnly: true
+      watchOnly: true,
+      accountKey: PUBKEY
     });
 
     await wallet.importKey('default', pub);
@@ -1288,7 +1377,8 @@ describe('Wallet', function() {
     const key = KeyRing.generate();
 
     const wallet = await wdb.create({
-      watchOnly: true
+      watchOnly: true,
+      accountKey: PUBKEY
     });
 
     await wallet.importAddress('default', key.getAddress());
@@ -1429,7 +1519,6 @@ describe('Wallet', function() {
     await wdb.addBlock(nextBlock(wdb), [t3.toTX()]);
 
     assert.strictEqual((await bob.getBalance()).unconfirmed, 30000);
-    await wdb.close();
   });
 
   it('should recover from a missed tx and double spend', async () => {
@@ -1501,7 +1590,6 @@ describe('Wallet', function() {
     await wdb.addBlock(nextBlock(wdb), [t3.toTX()]);
 
     assert.strictEqual((await bob.getBalance()).unconfirmed, 30000);
-    await wdb.close();
   });
 
   it('should remove a wallet', async () => {
@@ -1600,72 +1688,23 @@ describe('Wallet', function() {
     assert.strictEqual(balance.unconfirmed, satoshis * N);
   });
 
-  it('should accept canonically ordered dependent tx', async () => {
-    const alice = await wdb.create({
-      id: 'alice-111'
-    });
-    const bob = await wdb.create({
-      id: 'bob-2222'
-    });
+  it('should throw error with missing outputs', async () => {
+    const wallet = new Wallet({});
 
-    // send some transactions to alice
-    const satoshis = 1000000;
-    const N = 100;
+    let err = null;
 
-    const aliceTX = new MTX();
+    try {
+       await wallet.send({outputs: []});
+    } catch (e) {
+      err = e;
+   }
 
-    aliceTX.addInput(dummyInput());
-    aliceTX.addOutput(await alice.receiveAddress(), satoshis * N);
-
-    await wdb.addBlock(nextBlock(wdb), [aliceTX.toTX()]);
-
-    const rollbackHeight = wdb.state.height;
-    const bobTXs = [];
-
-    for (let i = 0; i < N; i++) {
-      const mtx = new MTX();
-      const script = Script.fromNulldata(random.randomBytes(20));
-
-      mtx.addOutput(await bob.receiveAddress(), satoshis);
-      // randomize hashes
-      mtx.addOutput(script, 0);
-
-      await alice.fund(mtx, {
-        rate: 0
-      });
-
-      bobTXs.push(mtx.toTX());
-      await wdb.addBlock(nextBlock(wdb), [mtx.toTX()]);
-    }
-
-    // revert blocks and add all txs in one block
-    await wdb.rollback(rollbackHeight);
-
-    assert.strictEqual((await alice.getBalance()).confirmed, satoshis * N);
-    assert.strictEqual((await bob.getBalance()).confirmed, 0);
-
-    sortTXs(bobTXs);
-
-    const block = nextBlock(wdb);
-
-    await wdb.addBlock(block, bobTXs);
-
-    assert.strictEqual((await alice.getBalance()).confirmed, 0);
-    assert.strictEqual((await bob.getBalance()).confirmed, satoshis * N);
-
-    await wdb.removeBlock(block);
-
-    assert.strictEqual((await alice.getBalance()).confirmed, satoshis * N);
-    assert.strictEqual((await bob.getBalance()).confirmed, 0);
+    assert(err);
+    assert.equal(err.message, 'At least one output required');
   });
 
   it('should cleanup', async () => {
     consensus.COINBASE_MATURITY = 100;
+    // await wdb.close();
   });
 });
-
-function sortTXs(txs) {
-  txs.sort((a, b) => a.txid() < b.txid() ? -1 : 1);
-
-  return txs;
-}
