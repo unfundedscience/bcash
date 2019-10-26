@@ -21,6 +21,7 @@ const KeyRing = require('../lib/primitives/keyring');
 const Address = require('../lib/primitives/address');
 const policy = require('../lib/protocol/policy');
 const common = require('./util/common');
+const nodejsUtil = require('util');
 
 const validTests = require('./data/tx-valid.json');
 const invalidTests = require('./data/tx-invalid.json');
@@ -979,5 +980,14 @@ describe('TX', function() {
 
     assert.throws(() => Script.fromNulldata(
       random.randomBytes(policy.MAX_OP_RETURN  + 1)));
+  });
+
+  it('should inspect TX', () => {
+    const tx = new TX();
+    const fmt = nodejsUtil.format(tx);
+    assert(typeof fmt === 'string');
+    assert(fmt.includes('hash'));
+    assert(fmt.includes('version'));
+    assert(fmt.includes('locktime'));
   });
 });
