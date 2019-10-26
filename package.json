@@ -1,16 +1,17 @@
 {
   "name": "bcash",
-  "version": "1.2.0",
+  "version": "2.0.0-dev",
   "description": "Bitcoin cash bike-shed",
   "license": "MIT",
   "repository": "git://github.com/bcoin-org/bcash.git",
   "homepage": "https://github.com/bcoin-org/bcash",
   "bugs": {
-    "url": "https://github.com/bcoin-org/bcash/issues"
+    "url": "https://github.com/rojii/bcash/issues"
   },
   "author": "Fedor Indutny <fedor@indutny.com>",
   "contributors": [
-    "Christopher Jeffrey <chjjeffrey@gmail.com>"
+    "Christopher Jeffrey <chjjeffrey@gmail.com>",
+    "Jonathan Gonzales <rojikkushisutemu@gmail.com>"
   ],
   "keywords": [
     "bcash",
@@ -52,7 +53,7 @@
     "n64": "^0.2.9"
   },
   "devDependencies": {
-    "bmocha": "^2.1.1"
+    "bmocha": "^2.1.2"
   },
   "main": "./lib/bcoin.js",
   "bin": {
@@ -82,8 +83,5 @@
     "./lib/workers/child": "./lib/workers/child-browser.js",
     "./lib/workers/parent": "./lib/workers/parent-browser.js",
     "./lib/bcash": "./lib/bcoin-browser.js"
-  },
-  "bcoin": {
-    "upstream": "15b024a3928ea8a54732bb2f5177ab1668468258"
   }
 }
