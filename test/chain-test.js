@@ -59,7 +59,7 @@ const wallet = new MemWallet({
   network
 });
 
-const MAA = network.block.magneticAnomalyActivationTime;
+const GRAVITON = util.now() + 10;
 
 let tip1 = null;
 let tip2 = null;
@@ -182,8 +182,6 @@ describe('Chain', function() {
     await chain.open();
     await miner.open();
     await workers.open();
-
-    network.block.magneticAnomalyActivationTime = util.now() + 3600;
 
     miner.addresses.length = 0;
     miner.addAddress(wallet.getReceive());
@@ -931,17 +929,14 @@ describe('Chain', function() {
     assert.strictEqual(await mineBlock(job), 'bad-txn-sigops');
   });
 
-  it('should activate magnetic anomaly', async () => {
+  it('should activate Graviton', async () => {
     const network = chain.network;
 
     const mtp = await chain.getMedianTime(chain.tip);
 
-    // make sure we don't activate it in the past.
-    const activationTime = Math.max(network.now(), mtp + 1);
-
     // modify activation time for test
-    network.block.magneticAnomalyActivationTime = activationTime;
-    assert.strictEqual(chain.state.hasMagneticAnomaly(), false);
+    network.block.gravitonActivationTime = GRAVITON;
+    assert.strictEqual(chain.state.hasGraviton(), false);
 
     // make sure we have MTP is more than activationTime
     for (let i = 0; i < consensus.MEDIAN_TIMESPAN >>> 1; i++) {
@@ -949,7 +944,7 @@ describe('Chain', function() {
       assert(await chain.add(block));
     }
 
-    assert.strictEqual(chain.state.hasMagneticAnomaly(), true);
+    assert.strictEqual(chain.state.hasGraviton(), true);
   });
 
   it('should not mine block with tx smaller than MIN_TX_SIZE', async () => {
