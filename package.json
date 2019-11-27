@@ -11,7 +11,7 @@
   "author": "Fedor Indutny <fedor@indutny.com>",
   "contributors": [
     "Christopher Jeffrey <chjjeffrey@gmail.com>",
-    "Jonathan Gonzales <rojikkushisutemu@gmail.com>"
+    "Jonathan Gonzalez <rojikkushisutemu@gmail.com>"
   ],
   "keywords": [
     "bcash",
@@ -21,12 +21,12 @@
     "wallet"
   ],
   "engines": {
-    "node": ">=8.6.0"
+    "node": ">=10.0.0"
   },
   "dependencies": {
     "bcfg": "^0.1.6",
     "bclient": "^0.1.7",
-    "bcrypto": "^4.1.0",
+    "bcrypto": "^4.2.9",
     "bdb": "^1.1.7",
     "bdns": "^0.1.5",
     "bevent": "^0.1.5",
@@ -42,7 +42,7 @@
     "bsip": "^0.1.8",
     "bsock": "^0.1.8",
     "bsocks": "^0.2.5",
-    "bstring": "^0.3.8",
+    "bstring": "^0.3.9",
     "btcp": "^0.1.5",
     "buffer-map": "0.0.7",
     "bufio": "^1.0.6",
