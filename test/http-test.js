@@ -3,19 +3,26 @@
 
 'use strict';
 
+const {BloomFilter} = require('bfilter');
 const assert = require('bsert');
+const {NodeClient, WalletClient} = require('../lib/client');
 const consensus = require('../lib/protocol/consensus');
 const Address = require('../lib/primitives/address');
 const Script = require('../lib/script/script');
 const Outpoint = require('../lib/primitives/outpoint');
 const MTX = require('../lib/primitives/mtx');
 const FullNode = require('../lib/node/fullnode');
+const ChainEntry = require('../lib/blockchain/chainentry');
 const pkg = require('../lib/pkg');
-const Network = require('../lib/protocol/network');
-const network = Network.get('regtest');
 
 if (process.browser)
   return;
+
+const ports = {
+  p2p: 49331,
+  node: 49332,
+  wallet: 49333
+};
 
 const node = new FullNode({
   network: 'regtest',
@@ -23,19 +30,25 @@ const node = new FullNode({
   walletAuth: true,
   memory: true,
   workers: true,
-  plugins: [require('../lib/wallet/plugin')]
+  workersSize: 2,
+  plugins: [require('../lib/wallet/plugin')],
+  port: ports.p2p,
+  httpPort: ports.node,
+  env: {
+    'BCASH_WALLET_HTTP_PORT': ports.wallet.toString()
+  }
 });
 
-const {NodeClient, WalletClient} = require('bclient');
-
 const nclient = new NodeClient({
-  port: network.rpcPort,
-  apiKey: 'foo'
+  port: ports.node,
+  apiKey: 'foo',
+  timeout: 15000
 });
 
 const wclient = new WalletClient({
-  port: network.walletPort,
-  apiKey: 'foo'
+  port: ports.wallet,
+  apiKey: 'foo',
+  timeout: 15000
 });
 
 let wallet = null;
@@ -44,6 +57,7 @@ const {wdb} = node.require('walletdb');
 
 let addr = null;
 let hash = null;
+let blocks = null;
 
 describe('HTTP', function() {
   this.timeout(15000);
@@ -66,9 +80,9 @@ describe('HTTP', function() {
     const info = await nclient.getInfo();
     assert.strictEqual(info.network, node.network.type);
     assert.strictEqual(info.version, pkg.version);
-    assert(info.pool, 'object');
+    assert(typeof info.pool === 'object');
     assert.strictEqual(info.pool.agent, node.pool.options.agent);
-    assert(info.chain, 'object');
+    assert(typeof info.chain, 'object');
     assert.strictEqual(info.chain.height, 0);
   });
 
@@ -255,6 +269,120 @@ describe('HTTP', function() {
       scriptPubKey: Script.fromAddress(addr).toRaw().toString('hex'),
       isscript: false
     });
+  });
+
+  for (const template of [true, false]) {
+    const suffix = template ? 'with template' : 'without template';
+    it(`should create and sign transaction ${suffix}`, async () => {
+      const change = await wallet.createChange('default');
+      const tx = await wallet.createTX({
+        template: template,
+        sign: true,
+        outputs: [{
+          address: change.address,
+          value: 50000 }]
+      });
+
+      const mtx = MTX.fromJSON(tx);
+
+      for (const input of tx.inputs) {
+        const script = input.script;
+
+        assert.notStrictEqual(script, '',
+        'Input must be signed.');
+      }
+
+      assert.strictEqual(mtx.verify(), true,
+      'Transaction must be signed.');
+    });
+  }
+
+  it('should create transaction without template', async () => {
+    const change = await wallet.createChange('default');
+    const tx = await wallet.createTX({
+      sign: false,
+      outputs: [{
+        address: change.address,
+        value: 50000
+      }]
+    });
+
+    for (const input of tx.inputs) {
+      const script = input.script;
+
+      assert.strictEqual(script.length, 0,
+        'Input must not be templated.');
+    }
+  });
+
+  it('should create transaction with template', async () => {
+    const change = await wallet.createChange('default');
+    const tx = await wallet.createTX({
+      sign: false,
+      template: true,
+      outputs: [{
+        address: change.address,
+        value: 20000
+      }]
+    });
+
+    for (const input of tx.inputs) {
+      const script = Buffer.from(input.script, 'hex');
+
+      // p2pkh
+      // 1 (OP_0 placeholder) + 1 (length) + 33 (pubkey)
+      assert.strictEqual(script.length, 35);
+      assert.strictEqual(script[0], 0x00,
+        'First item in stack must be a placeholder OP_0');
+    }
+  });
+
+  it('should generate 10 blocks from RPC call', async () => {
+    blocks = await nclient.execute(
+    'generatetoaddress',
+      [10, addr.toString('regtest')]
+    );
+    assert.strictEqual(blocks.length, 10);
+  });
+
+  it('should fetch null for block header that does not exist', async () => {
+    // Many blocks in the future
+    const header = await nclient.getBlockHeader(40000);
+    assert.equal(header, null);
+  });
+
+  it('should initiate rescan from socket without a bloom filter', async () => {
+    // Create an SPV-standard Bloom filter and add one of our wallet addresses.
+    const response = await nclient.call('rescan', 5);
+    assert.strictEqual(null, response);
+  });
+
+  it('should initiate rescan from socket WITH a bloom filter', async() => {
+    // Create an SPV-standard bloom filter and add one of our wallet addresses
+    const filter = BloomFilter.fromRate(20000, 0.001, BloomFilter.flags.ALL);
+    const walletAddr = addr.toString('regtest');
+    filter.add(walletAddr, 'ascii');
+
+    // Send Bloom filter to server
+    await nclient.call('set filter', filter.filter);
+
+    const matchingBlocks = [];
+    nclient.hook('block rescan', (entry, txs) => {
+      // Coinbase transaction were mined to our watch address, matching filter..
+      assert.strictEqual(txs.length, 1);
+      const cbtx = MTX.fromRaw(txs[0]);
+      assert.strictEqual(
+       cbtx.outputs[0].getAddress().toString('regtest'),
+       walletAddr
+      );
+
+      matchingBlocks.push(
+      ChainEntry.fromRaw(entry).rhash().toString('hex')
+      );
+    });
+
+    await nclient.call('rescan', 5);
+    assert.deepStrictEqual(matchingBlocks, blocks.slice(4));
   });
 
   it('should cleanup', async () => {
