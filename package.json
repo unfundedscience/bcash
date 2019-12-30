@@ -25,8 +25,8 @@
   },
   "dependencies": {
     "bcfg": "^0.1.6",
-    "bclient": "^0.1.7",
     "bcrypto": "^4.2.9",
+    "bcurl": "^0.1.6",
     "bdb": "^1.1.7",
     "bdns": "^0.1.5",
     "bevent": "^0.1.5",
