@@ -35,8 +35,8 @@ const miner = node.miner;
 const network = node.network;
 const {wdb} = node.require('walletdb');
 
-// Magnetic Anomaly Activation time
-const MAA = network.block.magneticAnomalyActivationTime;
+// May 15th hardfork update
+const PHONON = network.block.phononActivationTime;
 
 let wallet = null;
 let tip1 = null;
@@ -104,7 +104,7 @@ describe('Node', function() {
     miner.mempool = null;
     consensus.COINBASE_MATURITY = 0;
 
-    network.block.magneticAnomalyActivationTime = util.now() + 3600;
+    network.block.phononActivationTime = util.now() + 3600;
     await node.open();
   });
 
@@ -665,7 +665,7 @@ describe('Node', function() {
 
   it('should cleanup', async () => {
     consensus.COINBASE_MATURITY = 100;
-    network.block.magneticAnomalyActivationTime = MAA;
+    network.block.phononActivationTime = PHONON;
     await node.close();
   });
 });
