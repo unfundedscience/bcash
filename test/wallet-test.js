@@ -493,16 +493,16 @@ describe('Wallet', function() {
     await wdb.addTX(t1.toTX());
     assert.strictEqual((await wallet.getBalance()).unconfirmed, 50000);
 
-    let conflict = false;
+    let conflict = 0;
     wallet.on('conflict', () => {
-      conflict = true;
+      conflict += 1;
     });
 
     const t2 = new MTX();
     t2.addInput(input);
     t2.addOutput(new Address(), 5000);
     await wdb.addTX(t2.toTX());
-    assert(conflict);
+    assert.strictEqual(conflict, 1);
     assert.strictEqual((await wallet.getBalance()).unconfirmed, 0);
   });
 
@@ -521,9 +521,9 @@ describe('Wallet', function() {
     await wdb.addTX(txa.toTX());
     assert.strictEqual((await wallet.getBalance()).unconfirmed, 50000);
 
-    let conflict = false;
+    let conflict = 0;
     wallet.on('conflict', () => {
-      conflict = true;
+      conflict += 1;
     });
 
     const txb = new MTX();
@@ -532,7 +532,7 @@ describe('Wallet', function() {
     txb.addOutput(address, 49000);
     await wdb.addTX(txb.toTX());
 
-    assert(conflict);
+    assert.strictEqual(conflict, 1);
     assert.strictEqual((await wallet.getBalance()).unconfirmed, 49000);
   });
 
@@ -550,10 +550,10 @@ describe('Wallet', function() {
     await wdb.addTX(txa.toTX());
     assert.strictEqual((await wallet.getBalance()).unconfirmed, 50000);
     
-    let conflict = false;
+    let conflict = 0;
     
     wallet.on('conflict', () => {
-        conflict = true;
+        conflict += 1;
      });
 
     const txb = new MTX();
@@ -562,7 +562,7 @@ describe('Wallet', function() {
     txb.addOutput(address, 49000);
 
     await wdb.addBlock(nextBlock(wdb), [txb.toTX()]);
-    assert(conflict);
+    assert(conflict, 1);
     assert.strictEqual((await wallet.getBalance()).unconfirmed, 49000);
     assert.strictEqual((await wallet.getBalance()).confirmed, 49000);
   });
@@ -584,9 +584,11 @@ describe('Wallet', function() {
    assert.strictEqual((await wallet.getBalance()).unconfirmed, 50000);
    assert.strictEqual((await wallet.getBalance()).confirmed, 0);
 
-   let conflict = false;
+   let conflict = 0;
 
-   wallet.on('conflict', () => { conflict = true;});
+   wallet.on('conflict', () => { 
+	   conflict += 1;
+   });
    
    const txb = new MTX();
    txb.addInput(input0);
@@ -612,14 +614,14 @@ describe('Wallet', function() {
 
    wallet.txdb.removeConflict = removeConflict;
 
-   assert.strictEqual(conflict, false);
+   assert.strictEqual(conflict, 0);
    assert.strictEqual((await wallet.getBalance()).unconfirmed, 50000);
    assert.strictEqual((await wallet.getBalance()).confirmed, 0);
    assert.strictEqual(wdb.height, 1);
 
    await wdb.addBlock(entry, [txb.toTX()]);
 
-   assert.strictEqual(conflict, true);
+   assert.strictEqual(conflict, 1);
    assert.strictEqual((await wallet.getBalance()).unconfirmed, 49000);
    assert.strictEqual((await wallet.getBalance()).confirmed, 49000);
    assert.strictEqual(wdb.height, 2);
@@ -826,7 +828,7 @@ describe('Wallet', function() {
 
     assert.strictEqual(t2.getFee(v2), 5250);
 
-    assert.strictEqual(t2.getSize(), 519);
+    assert.strictEqual(t2.getSize(), 501);
 
     let balance = null;
     bob.once('balance', (b) => {
