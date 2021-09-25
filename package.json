@@ -1,6 +1,6 @@
 {
   "name": "bcash",
-  "version": "2.0.0-dev",
+  "version": "2.1.0-dev",
   "description": "Bitcoin cash bike-shed",
   "license": "MIT",
   "repository": "git://github.com/bcoin-org/bcash.git",
@@ -11,7 +11,8 @@
   "author": "Fedor Indutny <fedor@indutny.com>",
   "contributors": [
     "Christopher Jeffrey <chjjeffrey@gmail.com>",
-    "Jonathan Gonzalez <rojikkushisutemu@gmail.com>"
+    "Jonathan Gonzalez <rojikkushisutemu@gmail.com>",
+    "Vin Armani <vin@badger.cash>"
   ],
   "keywords": [
     "bcash",
