@@ -91,7 +91,7 @@
   "devDependencies": {
     "bmocha": "git+https://github.com/bcoin-org/bmocha.git#semver:=2.1.2"
   },
-  "main": "./lib/bcoin.js",
+  "main": "./lib/bcoin-browser.js",
   "bin": {
     "bcash": "./bin/bcash",
     "bcash-node": "./bin/node",
