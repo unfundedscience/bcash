@@ -44,7 +44,31 @@ function isError(stack, script, errorMsg, activated) {
 }
 
 describe('Shibusawa', function() {
-  it('should fail if not activated', async () => {
+  it('should do valid addition if not activated', async () => {
+    const stack = new Stack();
+    stack.push(Buffer.alloc(4, 1));
+    stack.push(Buffer.alloc(4, 1));
+
+    isSuccess(
+      stack, 
+      Script.fromString('OP_ADD'), 
+      Buffer.from('02020202', 'hex')
+    );
+  });
+
+  it('should do valid subtraction if not activated', async () => {
+    const stack = new Stack();
+    stack.push(Buffer.alloc(4, 3));
+    stack.push(Buffer.alloc(4, 1));
+
+    isSuccess(
+      stack, 
+      Script.fromString('OP_SUB'), 
+      Buffer.from('02020202', 'hex')
+    );
+  });
+
+  it('should fail on 64 bit integers if not activated', async () => {
     const stack = new Stack();
     stack.push(Buffer.alloc(8, 1));
     stack.push(Buffer.alloc(8, 1));
@@ -52,7 +76,7 @@ describe('Shibusawa', function() {
     isError(stack, Script.fromString('OP_ADD'), 'Script number overflow.');
   });
 
-  it('should do addition if activated', async () => {
+  it('should do addition on 64 bit integers if activated', async () => {
     const stack = new Stack();
     stack.push(Buffer.alloc(8, 2));
     stack.push(Buffer.alloc(8, 1));
@@ -65,7 +89,7 @@ describe('Shibusawa', function() {
     );
   });
 
-  it('should do subtraction if activated', async () => {
+  it('should do subtraction on 64 bit integers if activated', async () => {
     const stack = new Stack();
     stack.push(Buffer.alloc(8, 2));
     stack.push(Buffer.alloc(8, 1));
@@ -79,7 +103,7 @@ describe('Shibusawa', function() {
     );
   });
 
-  it('should throw error if addition overflows', async () => {
+  it('should throw error if 64 bit integer addition overflows', async () => {
     const max = ScriptNum.from('9223372036854775807')
     const one = ScriptNum.from('1')
     const stack = new Stack();
@@ -89,7 +113,7 @@ describe('Shibusawa', function() {
     isError(stack, Script.fromString('OP_ADD'), '64 bit ScriptNumber overflow.', true);
   });
 
-  it('should throw error if addition overflows with negative number', async () => {
+  it('should throw error if 64 bit integer addition overflows with negative number', async () => {
     const min = ScriptNum.from('-9223372036854775807')
     const negOne = ScriptNum.from('-1')
     const stack = new Stack();
@@ -99,7 +123,7 @@ describe('Shibusawa', function() {
     isError(stack, Script.fromString('OP_ADD'), '64 bit ScriptNumber overflow.', true);
   });
 
-  it('should throw error if subtraction overflows', async () => {
+  it('should throw error if 64 bit integer subtraction overflows', async () => {
     const min = ScriptNum.from('-9223372036854775807')
     const one = ScriptNum.from('1')
     const stack = new Stack();
@@ -109,7 +133,7 @@ describe('Shibusawa', function() {
     isError(stack, Script.fromString('OP_SUB'), '64 bit ScriptNumber overflow.', true);
   });
 
-  it('should throw error if subtraction overflows with negative number', async () => {
+  it('should throw error if 64 bit integer subtraction overflows with negative number', async () => {
     const max = ScriptNum.from('9223372036854775807')
     const negOne = ScriptNum.from('-1')
     const stack = new Stack();
@@ -117,5 +141,27 @@ describe('Shibusawa', function() {
     stack.push(negOne.toRaw());
 
     isError(stack, Script.fromString('OP_SUB'), '64 bit ScriptNumber overflow.', true);
+  });
+
+  it('should throw error if 0 + -9223372036854775808', async () => {
+    const zero = ScriptNum.from('0')
+    const min = ScriptNum.from('-9223372036854775808')
+
+    let err;
+    try {
+      zero.checkOverflow(min)
+    } catch (e) {
+      err = e;
+    }
+    assert(err, 'error');
+    assert.strictEqual(err.message, 'Invalid INT64_MIN');
+
+    try {
+      min.checkOverflow(zero)
+    } catch (e) {
+      err = e;
+    }
+    assert(err, 'error');
+    assert.strictEqual(err.message, 'Invalid INT64_MIN');
   });
 });
